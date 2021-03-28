@@ -28,25 +28,58 @@ class PatchCycleLoss(nn.Module):
         pos_onehot: batchsize, p_num
         p_sim_12 & p_sim_21, batchsize, p_num
         """
+        p_num = pos_onehot.shape[1]
         pos_num = pos_onehot.sum(1)  # b, 1
-        #print(pos_onehot)
-        #print(torch.sum(pos_onehot, dim=1))
-        
+    
         # cross entropy loss for action classification
-        ce_loss = self.criterion_ce(logits, labels)
+        ce_loss = self.criterion_ce(logits, labels)*self.sigma_ce
 
         # MSE loss for spatial coordinates
         sp_dist = torch.sqrt(((st_locs - st_locs_back)**2).sum(2))  # b, p_num
+
         log_softmax_sp = -pos_onehot * torch.log(F.softmax(sp_dist, dim=1))  # b, p_num
-        infonce_sp_loss = torch.div(log_softmax_sp.sum(1), pos_num+1e-4).mean()
+        infonce_sp_loss = torch.div(log_softmax_sp.sum(1), pos_num+1e-4).mean()*self.sigma_sp
 
         # InfoNCE loss for contrastive leraning
-        softmax_12 = F.softmax(p_sim_12, dim=1)
-        softmax_21 = F.softmax(p_sim_21, dim=1)
-        log_softmax = -pos_onehot * torch.log(softmax_12 * softmax_21) # -1/pos_num x sum(log(pos_instance)) 
-        info_nce_loss = torch.div(log_softmax.sum(1), pos_num+1e-4).mean()
+        # type1
+        prob = p_sim_12 * p_sim_21  # b, p_num
+        # normalization
+        mean = prob.mean(dim=1).unsqueeze(1)
+        stdv = torch.sqrt(((prob-mean)**2).sum(dim=1)/(p_num-1)).unsqueeze(1)
+        prob = ((prob-mean)/stdv)
+        softmax_prob = F.softmax(prob, dim=1)
+        log_softmax = -pos_onehot * torch.log(softmax_prob)
+        #print(prob[0])
+        
+        # type2
+        #softmax_12 = F.softmax(p_sim_12, dim=1)
+        #softmax_21 = F.softmax(p_sim_21, dim=1)        
+        #log_softmax = -pos_onehot * torch.log(softmax_12 * softmax_21) # -1/pos_num x sum(log(pos_instance)) 
+        
+
+        '''
+        # type3
+        mean = p_sim_12.mean(dim=1).unsqueeze(1)
+        stdv = torch.sqrt(((p_sim_12-mean)**2).sum(dim=1)/(p_num-1)).unsqueeze(1)
+        p_sim_12 = (p_sim_12-mean)/stdv
+        mean = p_sim_21.mean(dim=1).unsqueeze(1)
+        stdv = torch.sqrt(((p_sim_21-mean)**2).sum(dim=1)/(p_num-1)).unsqueeze(1)
+        p_sim_21 = (p_sim_21-mean)/stdv
+        log_softmax = -pos_onehot * torch.log(p_sim_12 * p_sim_21)
+        print(p_sim_12[0])
+        print(p_sim_21[0])
+        '''
+        
+        #print(mean[0])
+        #print(stdv[0])
+        #assert 1==0
+        
+        # type3
+        #print(log_softmax[0])
+        info_nce_loss = torch.div(log_softmax.sum(1), pos_num+1e-4).mean()*self.sigma_feat
+        
         #print(infonce_sp_loss, info_nce_loss)
-        losses = self.sigma_ce*ce_loss + self.sigma_sp*infonce_sp_loss + self.sigma_feat*info_nce_loss
+        losses = ce_loss + infonce_sp_loss + info_nce_loss
 
         #print(losses)
         #print(ce_loss, infonce_sp_loss, info_nce_loss)

@@ -135,20 +135,27 @@ class CycleNet(nn.Module):
             
             # consine similarity
             _norm_f2 = torch.transpose(norm_f2, 1, 2)  # b, p_num, c -> b, c, p_num
-            p_sim_12 = torch.einsum('bpc,bcn->bpn', [norm_f1, norm_f2])   # b, p_num, p_num, 1
+            p_sim_12 = torch.einsum('bpc,bcn->bpn', [norm_f1, norm_f2])*1   # b, p_num, p_num
 
             # trace from 1 -> 2
             maxids_12 = torch.argmax(p_sim_12, dim=2)  # b, p_num
             traceids_12 = maxids_12  # b, p_num
             # trace back 2 -> 1
-            maxids_21 = torch.argmax(p_sim_12, dim=1)  # b, p_num
+            p_sim_21 = torch.transpose(p_sim_12, 1, 2)
+            maxids_21 = torch.argmax(p_sim_21, dim=2)  # b, p_num
             traceids_21 = maxids_21.gather(dim=1, index=traceids_12)  # b, p_num 
             
+            #p_sim_12 = F.softmax(p_sim_12, dim=2)  # type3
             p_sim_12, _ = torch.max(p_sim_12, dim=2)  # b, p_num, p_num -> b, p_num 
-            _norm_f1 = torch.transpose(norm_f1, 1, 2)
-            p_sim_11 = torch.einsum('bpc,bcn->bpn', [norm_f1, _norm_f1])   # b, p_num, p_num
-            p_sim_21 = torch.gather(p_sim_11, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)  # b, p_num
-
+            #print(p_sim_21[0][0])
+            #p_sim_21 = F.softmax(p_sim_21, dim=2)
+            #print(p_sim_21[0][0])
+            #assert 1==0
+            p_sim_21 = torch.gather(p_sim_21, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)
+            
+            #print(p_sim_12[0])
+            #print(p_sim_21[0])
+            #assert 1==0
             # spatial-temporal similarity for MSE loss
             st_locs = self.m_st_locs.unsqueeze(0).repeat(b, 1, 1)  # p_num, 3 -> b, p_num, 3
             st_locs_back = torch.index_select(st_locs.view(b*p_num, 3), 0, traceids_21.view(-1))
@@ -156,7 +163,10 @@ class CycleNet(nn.Module):
 
             # initially p_num cycle pairs
             # then we choose the positive cycles with sim > threshold
-            pos_onehot = (p_sim_21>self.sim_thresh).int()
+            _norm_f1 = torch.transpose(norm_f1, 1, 2)
+            p_sim_11 = torch.einsum('bpc,bcn->bpn', [norm_f1, _norm_f1])   # b, p_num, p_num
+            p_sim = torch.gather(p_sim_11, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)  # b, p_num
+            pos_onehot = (p_sim>self.sim_thresh).int()
             #print(p_sim_12.shape, p_sim_21.shape)
             return logits, st_locs, st_locs_back, p_sim_12, p_sim_21, pos_onehot
         else:

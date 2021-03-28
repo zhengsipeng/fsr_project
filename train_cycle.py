@@ -37,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_epochs", type=int, default=4)
     parser.add_argument("--metric", type=str, default="cosine")  # euclidean, relation, cosine
     # ===========================Cycle consistency options========================
-    parser.add_argument("--epoch_iter", type=int, default=640000)
+    parser.add_argument("--epoch_iter", type=int, default=120000)
     parser.add_argument("--save_iter", type=int, default=6000)
     parser.add_argument("--num_classes", type=int, default=64)
     parser.add_argument("--sim_thresh", type=float, default=0.8)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("--classifier", type=str, default='LR')
     parser.add_argument("--sigma_ce", type=float, default=1)
     parser.add_argument("--sigma_sp", type=float, default=0.1)
-    parser.add_argument("--sigma_feat", type=float, default=0.4)
+    parser.add_argument("--sigma_feat", type=float, default=0.2)
     # ===========================Multi-modal options==============================
     parser.add_argument("--multi_modal", type=bool, default=False)
     parser.add_argument("--use_depth", type=bool, default=False)
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     assert args.metric in ["cosine", "euclidean", "relation"], "'{}' metric is invalid.".format(args.metric)
 
     # path to save
-    path_check(args.save_path)
+    #path_check(args.save_path)
     
     # path to tensorboard
     writer = SummaryWriter(args.tensorboard_path)
