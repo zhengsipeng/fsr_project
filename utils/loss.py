@@ -28,7 +28,7 @@ class PatchCycleLoss(nn.Module):
         pos_onehot: batchsize, p_num
         p_sim_12 & p_sim_21, batchsize, p_num
         """
-        pos_num = pos_onehot.sum(1)  # batchsize, 1
+        pos_num = pos_onehot.sum(1)  # b, 1
         #print(pos_onehot)
         #print(torch.sum(pos_onehot, dim=1))
         
@@ -45,13 +45,13 @@ class PatchCycleLoss(nn.Module):
         softmax_21 = F.softmax(p_sim_21, dim=1)
         log_softmax = -pos_onehot * torch.log(softmax_12 * softmax_21) # -1/pos_num x sum(log(pos_instance)) 
         info_nce_loss = torch.div(log_softmax.sum(1), pos_num+1e-4).mean()
-        print(infonce_sp_loss, info_nce_loss)
+        #print(infonce_sp_loss, info_nce_loss)
         losses = self.sigma_ce*ce_loss + self.sigma_sp*infonce_sp_loss + self.sigma_feat*info_nce_loss
 
         #print(losses)
         #print(ce_loss, infonce_sp_loss, info_nce_loss)
         #losses = ce_loss
-        assert 1==0
+        #assert 1==0
         return losses, ce_loss, infonce_sp_loss, info_nce_loss
 
 

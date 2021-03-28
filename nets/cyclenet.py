@@ -124,24 +124,29 @@ class CycleNet(nn.Module):
             # TODO
             # 1. 552 patch is too much, only consider the spatial when trace back
             # 2. add temporal weight on feature similarity (higher similar with closer temporal distance) 
-            _p_feats1 = m_scale_feats[:, 0, :, :]  # b, c, 552
-            _p_feats2 = m_scale_feats[:, 1, :, :]  # b, c, p_num
-            p_feats1 = torch.transpose(_p_feats1, 1, 2)  # b, p_num, c        
-            p_sim_12 = torch.einsum('bpc,bcn->bpn', [p_feats1, _p_feats2])   # b, p_num, p_num
-            p_sim_12 = p_sim_12 / self.last_dim  # normalize
-            maxids_12 = torch.argmax(p_sim_12, dim=2)  # b, p_num
-            maxids_21 = torch.argmax(p_sim_12, dim=1)  # b, p_num
+            p_feats1 = torch.transpose(m_scale_feats[:, 0, :, :], 1, 2)  # b, c, 552 -> b, 552, c
+            p_feats2 = torch.transpose(m_scale_feats[:, 1, :, :], 1, 2)  # b, c, p_num -> b, p_num, c
+
+            # normalize the feature
+            norm_f1 = (p_feats1*p_feats1).sum(2).sqrt().unsqueeze(2)
+            norm_f2 = (p_feats2*p_feats2).sum(2).sqrt().unsqueeze(2)
+            norm_f1 = torch.div(p_feats1, norm_f1)
+            norm_f2 = torch.transpose(torch.div(p_feats2, norm_f2), 1, 2)
             
+            # consine similarity
+            _norm_f2 = torch.transpose(norm_f2, 1, 2)  # b, p_num, c -> b, c, p_num
+            p_sim_12 = torch.einsum('bpc,bcn->bpn', [norm_f1, norm_f2])   # b, p_num, p_num, 1
+
             # trace from 1 -> 2
+            maxids_12 = torch.argmax(p_sim_12, dim=2)  # b, p_num
             traceids_12 = maxids_12  # b, p_num
             # trace back 2 -> 1
+            maxids_21 = torch.argmax(p_sim_12, dim=1)  # b, p_num
             traceids_21 = maxids_21.gather(dim=1, index=traceids_12)  # b, p_num 
             
-            # semantic similarity (softmax relative similarity)
-            p_sim_12, _ = torch.max(p_sim_12, dim=2)  # b, p_num, p_num -> b, p_num
-            #p_sim_12, _ = torch.max(F.softmax(p_sim_12, dim=2), dim=2)  # b, p_num, p_num -> b, p_num, softmax on 2    
-            p_sim_11 = torch.einsum('bpc,bcn->bpn', [p_feats1, _p_feats1]) / self.last_dim  # b, p_num, p_num
-            #p_sim_11 = F.softmax(p_sim_11, dim=2)  # b, p_num, p_num
+            p_sim_12, _ = torch.max(p_sim_12, dim=2)  # b, p_num, p_num -> b, p_num 
+            _norm_f1 = torch.transpose(norm_f1, 1, 2)
+            p_sim_11 = torch.einsum('bpc,bcn->bpn', [norm_f1, _norm_f1])   # b, p_num, p_num
             p_sim_21 = torch.gather(p_sim_11, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)  # b, p_num
 
             # spatial-temporal similarity for MSE loss
@@ -152,7 +157,7 @@ class CycleNet(nn.Module):
             # initially p_num cycle pairs
             # then we choose the positive cycles with sim > threshold
             pos_onehot = (p_sim_21>self.sim_thresh).int()
-
+            #print(p_sim_12.shape, p_sim_21.shape)
             return logits, st_locs, st_locs_back, p_sim_12, p_sim_21, pos_onehot
         else:
             """
@@ -278,10 +283,18 @@ class CycleNet(nn.Module):
 #p_feats1_back = torch.index_select(p_feats1.reshape(b*p_num, self.last_dim), 0, trace2_idxs.reshape(-1))
 #p_feats1_back = p_feats1_back.view(b, p_num, self.last_dim)  # p, p_num, 3
 #p_feats1_back = torch.transpose(p_feats1.gather(dim=1, index=trace2_idxs), 1, 2)  # b, p_num, c
-#p_back_sim = torch.einsum('bpc,bcn->bpn', [p_feats1_back, _p_feats1])  # b, p_num, p_num
+#p_back_sim = torch.einsum('bpc,bcn->bpn', [p_feats1_back, p_feats1])  # b, p_num, p_num
 #print(p_back_sim)
 #p_back_sim, _ = torch.max(F.softmax(p_back_sim, dim=2), dim=2)  # b, p_num
 #p_back_sim = p_back_sim.gather(dim=1, index=trace2_idxs)  # b, p_num -> b, p_num
+
+#_p_feats1 = p_feats1.repeat(1, 1, p_num).reshape(b*p_num*p_num, c)  # b, p_num, p_num*c -> b*p_num*p_num, c
+#_p_feats2 = p_feats2.repeat(1, p_num, 1).reshape(b*p_num*p_num, c)  
+#_p_feats1 = p_feats1.expand(b, p_num, p_num*self.last_dim)
+#_p_feats1 = _p_feats1.reshape(b*p_num*p_num, self.last_dim)
+#_p_feats2 = p_feats2.expand(b, p_num*p_num, self.last_dim).reshape(b*p_num*p_num, self.last_dim)  
+#p_sim_12 = torch.cosine_similarity(_p_feats1, _p_feats2, dim=1).reshape(b, p_num, p_num) 
+#p_sim_12, _ = torch.max(p_sim_12, dim=2)  # b, p_num, p_num -> b, p_num  
 
 
 def Proto(support, support_labels, query, way, shot):

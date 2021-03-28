@@ -34,13 +34,13 @@ if __name__ == "__main__":
     parser.add_argument("--query", type=int, default=5)
     parser.add_argument("--num_train_episode", type=int, default=7000)
     parser.add_argument("--num_val_episode", type=int, default=3000)
-    parser.add_argument("--num_epochs", type=int, default=10)
+    parser.add_argument("--num_epochs", type=int, default=4)
     parser.add_argument("--metric", type=str, default="cosine")  # euclidean, relation, cosine
     # ===========================Cycle consistency options========================
     parser.add_argument("--epoch_iter", type=int, default=640000)
-    parser.add_argument("--save_iter", type=int, default=640000)
+    parser.add_argument("--save_iter", type=int, default=6000)
     parser.add_argument("--num_classes", type=int, default=64)
-    parser.add_argument("--sim_thresh", type=float, default=0.5)
+    parser.add_argument("--sim_thresh", type=float, default=0.8)
     parser.add_argument("--iter_reset", type=int, default=10000)
     parser.add_argument("--batch_size", type=int, default=24)
     parser.add_argument("--is_pretrain", type=bool, default=True)
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", type=int, default=1)
     parser.add_argument("--hidden_size", type=int, default=512)
     parser.add_argument("--bidirectional", action="store_true")
-    parser.add_argument("--learning_rate", type=float, default=1e-3)
-    parser.add_argument("--scheduler_step_size", type=int, default=10)
-    parser.add_argument("--scheduler_gamma", type=float, default=0.9)
+    parser.add_argument("--learning_rate", type=float, default=0.0025)
+    parser.add_argument("--scheduler_epoch_size", type=int, default=1)
+    parser.add_argument("--scheduler_gamma", type=float, default=0.5)
     parser.add_argument("--bn_threshold", type=float, default=2e-2)    
     args = add_args(parser)
 
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     assert args.metric in ["cosine", "euclidean", "relation"], "'{}' metric is invalid.".format(args.metric)
 
     # path to save
-    #path_check(args.save_path)
+    path_check(args.save_path)
     
     # path to tensorboard
     writer = SummaryWriter(args.tensorboard_path)
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     criterion = PatchCycleLoss(args)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=5e-4)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.scheduler_step_size, gamma=args.scheduler_gamma)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.scheduler_epoch_size, gamma=args.scheduler_gamma)
 
     best = 0 # top1 best accuracy
     total_loss, total_ce, total_infonce_sp, total_infonce = 0, 0, 0, 0
@@ -179,8 +179,8 @@ if __name__ == "__main__":
             
             logits, st_locs, st_locs_back, log_p_sim, log_p_back_sim, pos_onehot = model(datas, aux)
             pos_num = pos_onehot.sum(1).float().mean()
-            if pos_num > 100:
-                args.sim_thresh += args.sim_thresh * 0.1
+            #if pos_num > 100:
+            #    args.sim_thresh += args.sim_thresh * 0.1
             #print(pos_onehot.sum(1))
             loss, ce_loss, infonce_sp_loss, info_nce_loss = criterion(logits, \
                         labels, st_locs, st_locs_back, log_p_sim, log_p_back_sim, pos_onehot)
@@ -215,10 +215,15 @@ if __name__ == "__main__":
             n_iter_train += 1
 
             # save the checkpoint
-            if i % (args.save_iter / args.batch_size) == 0:
+            if i+1 % args.save_iter == 0:
                 torch.save(model.state_dict(), os.path.join(args.save_path, "%d_%d.pth"%(e, args.epoch_iter)))
             #if i > 10:
-            #    break
+            #break
+
+        torch.save(model.state_dict(), os.path.join(args.save_path, "%d.pth"%e))
+
+        lr_scheduler.step()
+        #print(optimizer.state_dict()['param_groups'][0]['lr'])
 
         # we evaluate the network with meta-learning set using meta-val
         print("\nVal... {}-way {}-shot {}-query".format(args.way, args.shot, args.query))
@@ -245,4 +250,4 @@ if __name__ == "__main__":
                 writer.add_scalar("Accuracy/val", acc, n_iter_val)
                 n_iter_val += 1
                 #if i > 10:
-                #    break
+                #break
