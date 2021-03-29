@@ -43,14 +43,16 @@ class PatchCycleLoss(nn.Module):
         # InfoNCE loss for contrastive leraning
         # type1
         prob = p_sim_12 * p_sim_21  # b, p_num
+        prob = F.softmax(prob, dim=1)
+        print(prob[0])
         # normalization
         mean = prob.mean(dim=1).unsqueeze(1)
         stdv = torch.sqrt(((prob-mean)**2).sum(dim=1)/(p_num-1)).unsqueeze(1)
         prob = ((prob-mean)/stdv)
         softmax_prob = F.softmax(prob, dim=1)
         log_softmax = -pos_onehot * torch.log(softmax_prob)
-        #print(prob[0])
-        
+        print(prob[0])
+        assert 1==0
         # type2
         #softmax_12 = F.softmax(p_sim_12, dim=1)
         #softmax_21 = F.softmax(p_sim_21, dim=1)        
