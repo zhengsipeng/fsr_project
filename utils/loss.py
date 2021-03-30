@@ -138,3 +138,78 @@ def cross_entropy_loss(args, test_logits_sample, test_labels, device):
 #masked_st_locs_back = (st_locs_back*_pos_onehot).reshape(-1, 3)
 #sp_loss = self.criterion_mse(masked_st_locs, masked_st_locs_back)  # only calculate the positive pairs
 """
+
+
+class SupConLoss(nn.Module):
+    def __init__(self, args, contrast_mode='all', base_temperature=0.07):
+        super(SupConLoss, self).__init__()
+        self.args = args
+        self.use_ce = args.use_ce
+        self.cross_entropy = nn.CrossEntropyLoss(reduction="mean")
+        self.temperature = args.temp
+        self.contrast_mode = contrast_mode
+        self.base_temperature = base_temperature
+    
+    def forward(self, features, logits, labels=None, mask=None, loss_type=''):
+        """
+        features need to be [batchsize, n_views, ...] at least 3 dimenstions are required
+        """
+        device = torch.device('cuda') if features.is_cuda else torch.device('cpu')
+        batch_size = features.shape[0]
+        
+        
+        if loss_type == 'SimCLR':
+            mask = torch.eye(batch_size, dtype=torch.float32).to(device)
+        elif loss_type == 'SupCon':
+            labels = labels.contiguous().view(-1, 1)
+            if labels.shape[0] != batch_size:
+                raise ValueError('Num of labels does not match num of features')
+            mask = torch.eq(labels, labels.T).float().to(device)  # bsz, bsz
+        #print(mask)
+    
+        contrast_count = features.shape[1]  # n_views
+        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)  # bsz*2, c
+
+        if self.contrast_mode == 'one':
+            anchor_feature = features[:, 0]
+            anchor_count = 1
+        elif self.contrast_mode == 'all':
+            anchor_feature = contrast_feature
+            anchor_count = contrast_count  # 2
+        
+        # compute logits
+        anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T), self.temperature)
+        # for numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()  # bsz*2, bsz*2
+
+        # tile mask
+        mask = mask.repeat(anchor_count, contrast_count)
+        # mask-out self-contrast cases
+        logits_mask = torch.scatter(
+            torch.ones_like(mask),
+            1,
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
+            0
+        )  # mask i=i
+        mask = mask * logits_mask
+
+        # compute log prob
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))  # log(x/y) = logx - logy
+
+        # compute mean of log-likelihood over positive
+        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+
+        # loss 
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        contrast_loss = loss.view(anchor_count, batch_size).mean()
+
+        if self.use_ce:
+            ce_loss = self.cross_entropy(logits, labels)#*self.sigma_ce
+            loss = self.sigma_contrast_loss + self.sigma_ce*ce_loss
+            return loss, ce_loss, contrast_loss
+        else:
+            return contrast_loss, 0, contrast_loss
+        
+        

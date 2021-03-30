@@ -22,7 +22,6 @@ class CycleNet(nn.Module):
         super(CycleNet, self).__init__()
         self.patch_scales = [2, 4]
         self.sequence_length = args.sequence_length
-        self.sim_thresh = args.sim_thresh
         self.num_classes = args.num_classes
         self.multi_modal = args.multi_modal
         self.use_depth = args.use_depth
@@ -69,7 +68,7 @@ class CycleNet(nn.Module):
         self.query = args.query
         self.classifier = args.classifier
 
-    def get_m_st_loc(self, patch_scales, T=8, H=7, W=7, device=None):
+    def get_m_st_loc(self, patch_scales, T=8, H=7, W=7, stride=None, device=None):
         """ 
         generate multi_scale spatial-temporal locations
         """
@@ -147,15 +146,9 @@ class CycleNet(nn.Module):
             
             #p_sim_12 = F.softmax(p_sim_12, dim=2)  # type3
             p_sim_12, _ = torch.max(p_sim_12, dim=2)  # b, p_num, p_num -> b, p_num 
-            #print(p_sim_21[0][0])
-            #p_sim_21 = F.softmax(p_sim_21, dim=2)
-            #print(p_sim_21[0][0])
-            #assert 1==0
             p_sim_21 = torch.gather(p_sim_21, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)
             
-            #print(p_sim_12[0])
-            #print(p_sim_21[0])
-            #assert 1==0
+   
             # spatial-temporal similarity for MSE loss
             st_locs = self.m_st_locs.unsqueeze(0).repeat(b, 1, 1)  # p_num, 3 -> b, p_num, 3
             st_locs_back = torch.index_select(st_locs.view(b*p_num, 3), 0, traceids_21.view(-1))
@@ -165,10 +158,9 @@ class CycleNet(nn.Module):
             # then we choose the positive cycles with sim > threshold
             _norm_f1 = torch.transpose(norm_f1, 1, 2)
             p_sim_11 = torch.einsum('bpc,bcn->bpn', [norm_f1, _norm_f1])   # b, p_num, p_num
-            p_sim = torch.gather(p_sim_11, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)  # b, p_num
-            pos_onehot = (p_sim>self.sim_thresh).int()
-            #print(p_sim_12.shape, p_sim_21.shape)
-            return logits, st_locs, st_locs_back, p_sim_12, p_sim_21, pos_onehot
+            pos_sim = torch.gather(p_sim_11, dim=2, index=traceids_21.unsqueeze(2)).squeeze(-1)  # b, p_num
+
+            return logits, st_locs, st_locs_back, p_sim_12, p_sim_21, pos_sim
         else:
             """
             for meta-testing, we simply use linear classifier by sklearn

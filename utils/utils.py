@@ -7,6 +7,24 @@ import numpy as np
 from enum import Enum
 
 
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+    
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+        
 def printer_cycle(status, epoch, num_epochs, batch, num_batchs, loss, loss_mean, ce, ce_mean, 
             infonce_sp, infonce_sp_mean, infonce, infonce_mean, acc, acc_mean, pos_num, sim_thresh):
     sys.stdout.write("\r[{}]-[Epoch {}/{}] [Batch {}/{}] [Loss: {:.4f} (mean: {:.4f}), Acc: {:.2f}% (mean: {:.2f}%)] [CE: {:.3f} (mean: {:.3f}), SP: {:.3f} (mean: {:.3f}), FEAT: {:.3f} (mean: {:.3f}), pos: {:.1f}, thresh: {:.4f}]".format(
