@@ -207,9 +207,14 @@ class SupConLoss(nn.Module):
 
         if self.use_ce:
             ce_loss = self.cross_entropy(logits, labels)#*self.sigma_ce
+        
+        if self.use_ce and not self.use_contrast:
             loss = self.sigma_contrast_loss + self.sigma_ce*ce_loss
             return loss, ce_loss, contrast_loss
-        else:
+        elif self.use_contrast and not self.use_ce:
             return contrast_loss, 0, contrast_loss
+        else:   
+            return 
+            
         
         

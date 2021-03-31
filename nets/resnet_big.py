@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 from .backbones.resnet import resnet18, resnet34, resnet50
-
+from .utils import Proto, NN, Cosine
 from sklearn import metrics
 from sklearn.svm import SVC, LinearSVC
 from sklearn.linear_model import LogisticRegression
