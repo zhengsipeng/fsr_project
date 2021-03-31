@@ -150,14 +150,15 @@ class SupConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
     
-    def forward(self, features, logits, labels=None, mask=None, loss_type=''):
+    def forward(self, features, logits, labels, loss_type=''):
         """
         features need to be [batchsize, n_views, ...] at least 3 dimenstions are required
         """
         device = torch.device('cuda') if features.is_cuda else torch.device('cpu')
         batch_size = features.shape[0]
         
-        
+        #print(features.shape, logits.shape, labels.shape)
+        #assert 1==0
         if loss_type == 'SimCLR':
             mask = torch.eye(batch_size, dtype=torch.float32).to(device)
         elif loss_type == 'SupCon':
@@ -165,8 +166,7 @@ class SupConLoss(nn.Module):
             if labels.shape[0] != batch_size:
                 raise ValueError('Num of labels does not match num of features')
             mask = torch.eq(labels, labels.T).float().to(device)  # bsz, bsz
-        #print(mask)
-    
+
         contrast_count = features.shape[1]  # n_views
         contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)  # bsz*2, c
 

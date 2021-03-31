@@ -210,7 +210,7 @@ class SupConResNet(nn.Module):
             feat = self.encoder(x)
             #assert 1==0
             feat = feat.reshape(b2, t, -1).mean(1)  # b2, c
-            logits = self.action_classifier(feat)
+            logits = self.action_classifier(feat[:bsz])
 
             feat = torch.flatten(feat, 1)
             feat = self.head(feat)

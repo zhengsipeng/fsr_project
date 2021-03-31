@@ -159,25 +159,26 @@ if __name__ == "__main__":
                 val_loss = []
                 model.eval()
                 with torch.no_grad():
-                    for i, (datas, modal_aux) in enumerate(val_loader):
-                        labels = torch.arange(args.way).repeat(args.shot+args.query).to(device)
+                    for i, (_datas, modal_aux) in enumerate(val_loader):
+                        _labels = torch.arange(args.way).repeat(args.shot+args.query).to(device)
 
                         aux = dict()
                         for modal in ['depth', 'pose', 'flow']:
                             if modal in modal_aux:
                                 aux[modal] = modal_aux[modal].to(device)
-                        datas = datas.to(device)  # way*shot+way*query
+                        _datas = _datas.to(device)  # way*shot+way*query
 
-                        acc = model(datas, aux, labels, is_pretrain=False)
+                        acc = model(_datas, aux, _labels, is_pretrain=False)
                         val_acc.append(acc)
                         total_acc = sum(val_acc) / len(val_acc)
 
                         printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100)
-
+                        #break
             # datas: 2, bsz, t, 3, h, w
             datas = torch.cat([datas[0], datas[1]], dim=0)
             datas = datas.to(device)  # batchsize*2, T, C, H, W
-
+            #assert 1==0
+            #print(datas.shape)
             labels = labels.to(device)
             bsz = labels.shape[0]
 
