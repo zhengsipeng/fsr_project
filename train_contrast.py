@@ -35,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--shot", type=int, default=1)
     parser.add_argument("--query", type=int, default=5)
     parser.add_argument("--num_train_episode", type=int, default=7000)
-    parser.add_argument("--num_val_episode", type=int, default=100)
+    parser.add_argument("--num_val_episode", type=int, default=1000)
     parser.add_argument("--metric", type=str, default="cosine")  # euclidean, relation, cosine
     # ===========================Contrastive options========================
     parser.add_argument("--temp", type=float, default=0.07)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     assert args.metric in ["cosine", "euclidean", "relation"], "'{}' metric is invalid.".format(args.metric)
 
     # path to save
-    #path_check(args.save_path)
+    path_check(args.save_path)
     
     # path to tensorboard
     writer = SummaryWriter(args.tensorboard_path)
@@ -155,7 +155,7 @@ if __name__ == "__main__":
         train_acc = []
         model.train()
         for idx, (datas, labels) in enumerate(train_loader):
-            if idx % 200 == 0:
+            if idx % 150 == 0:
                 # we evaluate the network with meta-learning set using meta-val
                 print("\nTest... {}-way {}-shot {}-query".format(args.way, args.shot, args.query))
                 val_acc = []
@@ -163,6 +163,8 @@ if __name__ == "__main__":
                 model.eval()
                 with torch.no_grad():
                     for i, (_datas, modal_aux) in enumerate(val_loader):
+                        if i > 100:
+                            break
                         _labels = torch.arange(args.way).repeat(args.shot+args.query).to(device)
 
                         aux = dict()
@@ -176,7 +178,7 @@ if __name__ == "__main__":
                         total_acc = sum(val_acc) / len(val_acc)
 
                         printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100)
-                        print("\n")
+                    print("\n")
 
             # datas: 2, bsz, t, 3, h, w
             datas = torch.cat([datas[0], datas[1]], dim=0)
@@ -205,6 +207,28 @@ if __name__ == "__main__":
         torch.save(model.state_dict(), os.path.join(args.save_path, "%d.pth"%e))
 
         lr_scheduler.step()
+        if e % 2 == 0:
+            # we evaluate the network with meta-learning set using meta-val
+            print("\nTest Epoch_{}... {}-way {}-shot {}-query".format(e, args.way, args.shot, args.query))
+            val_acc = []
+            val_loss = []
+            model.eval()
+            with torch.no_grad():
+                for i, (_datas, modal_aux) in enumerate(val_loader):
+                    _labels = torch.arange(args.way).repeat(args.shot+args.query).to(device)
+
+                    aux = dict()
+                    for modal in ['depth', 'pose', 'flow']:
+                        if modal in modal_aux:
+                            aux[modal] = modal_aux[modal].to(device)
+                    _datas = _datas.to(device)  # way*shot+way*query
+
+                    acc = model(_datas, aux, _labels, is_pretrain=False)
+                    val_acc.append(acc)
+                    total_acc = sum(val_acc) / len(val_acc)
+
+                    printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100)
+                print("\n")
 
         
                 
