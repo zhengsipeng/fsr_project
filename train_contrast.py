@@ -41,6 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--temp", type=float, default=0.07)
     parser.add_argument("--contrast_loss", type=str, default='SupCon')
     parser.add_argument("--use_ce", action="store_true")
+    parser.add_argument("--use_contrast", action="store_true")
     # ===========================Cycle consistency options========================
     parser.add_argument("--num_epochs", type=int, default=20)
     parser.add_argument("--epoch_iter", type=int, default=120000)
@@ -173,7 +174,8 @@ if __name__ == "__main__":
                         total_acc = sum(val_acc) / len(val_acc)
 
                         printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100)
-                        #break
+                        print("\n")
+
             # datas: 2, bsz, t, 3, h, w
             datas = torch.cat([datas[0], datas[1]], dim=0)
             datas = datas.to(device)  # batchsize*2, T, C, H, W
