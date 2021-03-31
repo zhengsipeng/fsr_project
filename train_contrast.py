@@ -42,6 +42,8 @@ if __name__ == "__main__":
     parser.add_argument("--contrast_loss", type=str, default='SupCon')
     parser.add_argument("--use_ce", action="store_true")
     parser.add_argument("--use_contrast", action="store_true")
+    parser.add_argument("--sigma_contrast", type=float, default=1)
+    parser.add_argument("--sigma_ce", type=float, default=1)
     # ===========================Cycle consistency options========================
     parser.add_argument("--num_epochs", type=int, default=20)
     parser.add_argument("--epoch_iter", type=int, default=120000)

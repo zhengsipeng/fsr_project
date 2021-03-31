@@ -150,7 +150,9 @@ class SupConLoss(nn.Module):
         self.temperature = args.temp
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
-    
+        self.sigma_contrast = args.sigma_contrast
+        self.sigma_ce = args.sigma_ce
+
     def forward(self, features, logits, labels, loss_type=''):
         """
         features need to be [batchsize, n_views, ...] at least 3 dimenstions are required
@@ -210,7 +212,7 @@ class SupConLoss(nn.Module):
             ce_loss = self.cross_entropy(logits, labels)#*self.sigma_ce
         
         if self.use_ce and self.use_contrast:
-            loss = self.sigma_contrast_loss + self.sigma_ce*ce_loss
+            loss = self.sigma_contrast + self.sigma_ce*ce_loss
             return loss, ce_loss, contrast_loss
         elif self.use_contrast and not self.use_ce:
             return contrast_loss, 0, contrast_loss
