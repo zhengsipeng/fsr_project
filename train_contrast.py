@@ -190,7 +190,9 @@ if __name__ == "__main__":
             bsz = labels.shape[0]
 
             logits, features = model(datas)
-            
+            acc = (logits.argmax(1)==labels).mean().item()
+            train_acc.append(acc)
+            total_acc = sum(train_acc) / len(train_acc)
             # SupCon, SimCLR
             loss, ce_loss, contrast_loss = criterion(features, logits, labels, loss_type=args.contrast_loss)
             losses.update(loss.item(), bsz)
@@ -201,7 +203,7 @@ if __name__ == "__main__":
             optimizer.step()
 
             if args.use_ce:
-                print('Train: [epoch: %d][iter: %d][loss: %.4f][ce: %.3f][contrast: %.3f][avg_loss: %.4f]'%(e, idx, losses.val, ce_loss.item(), contrast_loss.item(), losses.avg))
+                print('Train: [epoch: %d][iter: %d][loss: %.4f][ce: %.3f][contrast: %.3f][avg_loss: %.3f][acc: %.3f]'%(e, idx, losses.val, ce_loss.item(), contrast_loss.item(), losses.avg, total_acc*100))
             else:
                 print('Train: [epoch: %d][iter: %d][loss: %.4f][avg_loss: %.4f]'%(e, idx, losses.val, losses.avg))
 

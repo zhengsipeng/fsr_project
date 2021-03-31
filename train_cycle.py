@@ -161,7 +161,7 @@ if __name__ == "__main__":
         train_loss, train_ce, train_infonce_sp, train_infonce = [], [], [], []
         train_acc = []
         model.train()
-        '''
+
         for i, (datas, modal_aux, labels, frames) in enumerate(train_loader):
             #params = list(model.named_parameters())
             #print(params[0][1].data)
@@ -232,7 +232,7 @@ if __name__ == "__main__":
         torch.save(model.state_dict(), os.path.join(args.save_path, "%d.pth"%e))
 
         lr_scheduler.step()
-        '''
+      
         # we evaluate the network with meta-learning set using meta-val
         print("\nVal... {}-way {}-shot {}-query".format(args.way, args.shot, args.query))
         val_acc = []
