@@ -1,7 +1,7 @@
-import torch
 import os
 import sys
 import argparse
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchsummary import summary
@@ -128,9 +128,9 @@ if __name__ == "__main__":
     )
 
     train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
-                              pin_memory=True, sampler=None)     
+                              num_workers=4, pin_memory=True, sampler=None)     
     val_sampler = EpisodeSampler(val_dataset.classes, args.num_val_episode, args.way, args.shot, args.query)
-    val_loader = DataLoader(dataset=val_dataset, batch_sampler=val_sampler, num_workers=0 if os.name == 'nt' else 4, pin_memory=True)
+    val_loader = DataLoader(dataset=val_dataset, batch_sampler=val_sampler, num_workers=4, pin_memory=True)
 
     # ============
     # Model Build
@@ -150,12 +150,13 @@ if __name__ == "__main__":
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.scheduler_epoch_size, gamma=args.scheduler_gamma)
     
     losses = AverageMeter()
+    max_acc = 0
     for e in range(args.num_epochs):
         train_loss = []
         train_acc = []
         model.train()
         for idx, (datas, labels) in enumerate(train_loader):
-            if idx % 150 == 0:
+            if (idx+1) % 150 == 0:
                 # we evaluate the network with meta-learning set using meta-val
                 print("\nTest... {}-way {}-shot {}-query".format(args.way, args.shot, args.query))
                 val_acc = []
@@ -204,10 +205,12 @@ if __name__ == "__main__":
             else:
                 print('Train: [epoch: %d][iter: %d][loss: %.4f][avg_loss: %.4f]'%(e, idx, losses.val, losses.avg))
 
+            torch.cuda.empty_cache()
+
         torch.save(model.state_dict(), os.path.join(args.save_path, "%d.pth"%e))
 
         lr_scheduler.step()
-        if e % 2 == 0:
+        if (e+1) % 2 == 0:
             # we evaluate the network with meta-learning set using meta-val
             print("\nTest Epoch_{}... {}-way {}-shot {}-query".format(e, args.way, args.shot, args.query))
             val_acc = []
@@ -227,7 +230,9 @@ if __name__ == "__main__":
                     val_acc.append(acc)
                     total_acc = sum(val_acc) / len(val_acc)
 
-                    printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100)
+                    printer("val", e, args.num_epochs, i+1, len(val_loader), 0, 0, acc * 100, total_acc * 100, max_acc=max_acc)
+                if total_acc > max_acc:
+                    max_acc = total_acc
                 print("\n")
 
         
