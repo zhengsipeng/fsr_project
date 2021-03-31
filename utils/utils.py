@@ -34,19 +34,34 @@ def printer_cycle(status, epoch, num_epochs, batch, num_batchs, loss, loss_mean,
     )
 
     
-def printer(status, epoch, num_epochs, batch, num_batchs, loss, loss_mean, acc, acc_mean):
-    sys.stdout.write("\r[{}]-[Epoch {}/{}] [Batch {}/{}] [Loss: {:.4f} (mean: {:.4f}), Acc: {:.2f}% (mean: {:.2f}%)] ".format(
-            status,
-            epoch,
-            num_epochs,
-            batch,
-            num_batchs,
-            loss,
-            loss_mean,
-            acc,
-            acc_mean
+def printer(status, epoch, num_epochs, batch, num_batchs, loss, loss_mean, acc, acc_mean, max_acc=None):
+    if max_acc is None:
+        sys.stdout.write("\r[{}]-[Epoch {}/{}] [Batch {}/{}] [Loss: {:.4f} (mean: {:.4f}), Acc: {:.2f}% (mean: {:.2f}%)] ".format(
+                status,
+                epoch,
+                num_epochs,
+                batch,
+                num_batchs,
+                loss,
+                loss_mean,
+                acc,
+                acc_mean
+            )
         )
-    )
+    else:
+        sys.stdout.write("\r[{}]-[Epoch {}/{}] [Batch {}/{}] [Loss: {:.4f} (mean: {:.4f}), Acc: {:.2f}% (mean: {:.2f}%), Max_Acc: {:.2f}] ".format(
+                status,
+                epoch,
+                num_epochs,
+                batch,
+                num_batchs,
+                loss,
+                loss_mean,
+                acc,
+                acc_mean,
+                max_acc
+            )
+        )
 
 
 def path_check(path):

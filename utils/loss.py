@@ -153,7 +153,7 @@ class SupConLoss(nn.Module):
         self.sigma_contrast = args.sigma_contrast
         self.sigma_ce = args.sigma_ce
 
-    def forward(self, features, logits, labels, loss_type=''):
+    def forward(self, features, preds, labels, loss_type=''):
         """
         features need to be [batchsize, n_views, ...] at least 3 dimenstions are required
         """
@@ -209,7 +209,8 @@ class SupConLoss(nn.Module):
         contrast_loss = loss.view(anchor_count, batch_size).mean()
 
         if self.use_ce:
-            ce_loss = self.cross_entropy(logits, labels)#*self.sigma_ce
+            labels = labels.reshape(-1)
+            ce_loss = self.cross_entropy(preds, labels)  #*self.sigma_ce
         
         if self.use_ce and self.use_contrast:
             loss = self.sigma_contrast + self.sigma_ce*ce_loss
