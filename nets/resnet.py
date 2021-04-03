@@ -1,7 +1,11 @@
+"""
+ResNet backbone for multi-modal fusion
+"""
+
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-from ..utils import Exchange, BatchNorm2dParallel, ModuleParallel
+from .utils import Exchange, BatchNorm2dParallel, ModuleParallel
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']

@@ -6,42 +6,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 from .utils import average_pool
-from .utils import Proto, NN, Cosine
-# for simply classification
-from sklearn import metrics
-from sklearn.svm import SVC, LinearSVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from .base_net import BaseNet
 
 
-class CycleNet(nn.Module):
+class CycleNet(BaseNet):
     def __init__(self, args, device):
-        super(CycleNet, self).__init__()
+        super(CycleNet, self).__init__(args)
         self.patch_scales = [2, 4]
-        self.sequence_length = args.sequence_length
-        self.num_classes = args.num_classes
-        self.multi_modal = args.multi_modal
-        self.use_depth = args.use_depth
-        self.use_pose = args.use_pose
-        self.use_flow = args.use_flow
-        self.fusion = args.fusion
-        self.sharing = args.sharing
-        if not self.sharing:
-            self.use_depth = False
-            self.use_pose = False
-            self.use_flow = False
-            self.fusion = False
 
-        self.backbone = args.backbone
-        self.freeze_all = args.freeze_all
-        self.resnet  = self.build_backbone(args.bn_threshold)
         if not self.sharing:
-            self.resnet2 = self.build_backbone(args.bn_threshold)  # backbone for modality 2
+            self.encoder2 = self.build_backbone()  # backbone for modality 2
             if self.use_depth and self.use_pose and self.use_flow:
-                self.resnet3 = self.build_backbone(args.bn_threshold)
+                self.encoder3 = self.build_backbone()
         
         # --------------------
         # pretraining setting
@@ -49,24 +25,8 @@ class CycleNet(nn.Module):
         # average pool for multi-level patch
         self.p_avg_pool = average_pool
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.action_classifier = nn.Linear(self.last_dim, self.num_classes)
-        '''
-        self.action_classifier = nn.Sequential(
-            nn.Linear(self.last_dim, 1024),
-            nn.Dropout(0.5),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, self.num_classes)
-        )
-        '''
-        self.m_st_locs = self.get_m_st_loc(patch_scales=[1]+self.patch_scales, device=device) # 7*7 + 4*4 + 2*2 = 49+16+4=67
 
-        # ----------------------
-        # meta-learning setting
-        # ----------------------
-        self.way = args.way
-        self.shot = args.shot
-        self.query = args.query
-        self.classifier = args.classifier
+        self.m_st_locs = self.get_m_st_loc(patch_scales=[1]+self.patch_scales, device=device) # 7*7 + 4*4 + 2*2 = 49+16+4=67
 
     def get_m_st_loc(self, patch_scales, T=8, H=7, W=7, stride=None, device=None):
         """ 
@@ -96,8 +56,8 @@ class CycleNet(nn.Module):
             """
             b, _, t, c, h, w = datas.shape  # d: single or double
             x = datas.view(b*2*t, c, h, w)
-            x = self.multi_modal_aux(x, aux, is_pretrain, b, t)
-            x = self.resnet(x)  # b*2*t, c, 7, 7
+            x = self.multi_modal_aux(x, aux, is_pretrain)
+            x = self.encoder(x)  # b*2*t, c, 7, 7
             
             # action classification
             _x = self.avgpool(x).squeeze()  # b*s*t, c
@@ -168,8 +128,8 @@ class CycleNet(nn.Module):
             x = datas
             b, t, c, h, w = x.shape # way*(shot+query), num_frame, c, h, w
             x = x.view(b*t, c, h, w)
-            x = self.multi_modal_aux(x, aux, is_pretrain, b, t)
-            x = self.resnet(x)
+            x = self.multi_modal_aux(x, aux, is_pretrain)
+            x = self.encoder(x)
             x = self.res_avgpool(x).squeeze()
             x = x.reshape(b, t, self.last_dim).mean(1)
             
@@ -182,105 +142,6 @@ class CycleNet(nn.Module):
             
             return query_pred
     
-    def simple_classifier(self, classifier, support_feats, query_feats, support_labels, query_labels):
-        support_feats = support_feats.cpu().numpy()
-        query_feats = query_feats.cpu().numpy()
-        support_labels = support_labels.cpu().numpy()
-        query_labels = query_labels.cpu().numpy()
-        
-        if classifier == "LR":
-            clf = LogisticRegression(penalty='l2', random_state=0, C=1.0, solver='lbfgs',
-                                     max_iter=1000, multi_class='multinomial')
-  
-            clf.fit(support_feats, support_labels)
-            query_pred = clf.predict(query_feats)
-        elif classifier == 'SVM':
-            clf = make_pipeline(StandardScaler(), SVC(gamma='auto', C=1, kernel='linear',
-                                                    decision_function_shape='ovr'))
-            clf.fit(support_feats, support_labels)
-            query_pred = clf.predict(query_feats)
-        elif classifier == 'NN':
-            query_pred = NN(support_feats, support_labels, query_feats)
-        elif classifier == 'Cosine':
-            query_pred = Cosine(support_feats, support_labels, query_feats)
-        elif classifier == 'Proto':
-            query_pred = Proto(support_feats, support_labels, query_feats, self.way, self.shot)
-        else:
-            raise NotImplementedError
-
-        acc = metrics.accuracy_score(query_labels, query_pred)
-        return acc
-
-    def multi_modal_aux(self, x, aux, is_pretrain, b, t_frame):
-        if is_pretrain:
-            num = b*2*t_frame
-        else:
-            num = b*t_frame
-
-        if self.multi_modal:
-            mm_x= [x]
-            if self.use_depth:
-                depth = aux['depth'].view(num, c, h ,w)
-                mm_x = mm_x + [depth]
-            if self.use_pose:
-                pose = aux['pose'].view(num, c, h ,w)
-                mm_x = mm_x + [pose]
-            if self.use_flow:
-                flow = aux['flow'].view(num, c, h ,w)
-                mm_x = mm_x + [flow]
-            x = mm_x
-            #x = torch.cat(x, dim=1).squeeze()
-        return x
-
-    def build_backbone(self, bn_threshold):
-        if self.multi_modal:
-            num_parallel = 1+int(self.use_depth)+int(self.use_pose)+int(self.use_flow)
-
-            if self.backbone == "resnet18":
-                resnet = resnet18(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion) 
-            elif self.backbone == "resnet34":
-                resnet = resnet34(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion)
-            elif self.backbone == "resnet50":
-                resnet = resnet50(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion)
-        else:
-            if self.backbone == "resnet18":
-                resnet = models.resnet18(pretrained=True)  
-            elif self.backbone == "resnet34":
-                resnet = models.resnet34(pretrained=True)
-            elif self.backbone == "resnet50":
-                resnet = models.resnet50(pretrained=True)
-        last_layer_idx = -1
-        self.last_dim = resnet.fc.in_features
-        self.res_avgpool = resnet.avgpool
-        #self.resnet = nn.Sequential(*list(resnet.children())[:last_layer_idx])
-
-        resnet = nn.Sequential(
-            resnet.conv1,
-            resnet.bn1,
-            resnet.relu,
-            resnet.maxpool,
-            resnet.layer1,
-            resnet.layer2,
-            resnet.layer3,
-            resnet.layer4,
-            #resnet.avgpool,  # we delete the pooling layer to output 7x7 feature map
-        )
-
-        if self.freeze_all:
-            resnet.apply(freeze_all)
-
-        return resnet
-
-    def distribute_model(self, num_gpus):
-        """
-        Distribte the backbone over multiple GPUs
-        """
-        if num_gpus > 1:
-            self.resnet.cuda(0)
-            self.resnet = torch.nn.DataParallel(self.resnet, device_ids=[i for i in range(num_gpus)])
 
 #p_feats1_back = torch.index_select(p_feats1.reshape(b*p_num, self.last_dim), 0, trace2_idxs.reshape(-1))
 #p_feats1_back = p_feats1_back.view(b, p_num, self.last_dim)  # p, p_num, 3

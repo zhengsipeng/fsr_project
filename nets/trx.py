@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from itertools import combinations 
-from .backbones.resnet import resnet18, resnet34, resnet50
-from .utils import freeze_all, freeze_layer, freeze_bn, initialize_linear, initialize_3d
+from .utils import freeze_all, freeze_bn, initialize_linear, initialize_3d
+from .base_net import BaseNet
 
 
 class PositionalEncoding(nn.Module):
@@ -127,33 +127,18 @@ class TemporalCrossTransformer(nn.Module):
         return torch.reshape(class_mask_indices, (-1,))  # reshape to be a 1D vector
         
 
-class TRX(nn.Module):
+class TRX(BaseNet):
     """
     Standard Resnet connected to a Temporal Cross Transformer.
     """
     def __init__(self, args, way=5, shot=1, query=5):
-        super(TRX, self).__init__()
-        #self.train()
-        self.way = way
-        self.shot = shot
-        self.query = query
+        super(TRX, self).__init__(args)
         self.metric = args.metric
-        self.sequence_length = 8
-
-        # multi-modal
-        self.multi_modal = args.multi_modal
-        self.use_depth = args.use_depth
-        self.use_pose = args.use_pose
-        self.use_flow = args.use_flow
-        self.fusion = args.fusion
-        self.num_modal = 1 + int(self.use_depth)+int(self.use_pose)+int(self.use_flow)
-
-        self.backbone = args.backbone
-        self.freeze_all = args.freeze_all
-        self.build_backbone(args.bn_threshold)
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set]) 
 
-    def forward(self, shot, query, support_labels, aux):
+    def forward(self, shot, query, labels, aux):
+        support_labels = torch.arange(self.way).repeat(self.shot).to(device)
+        
         x = torch.cat((shot, query), dim=0)
         b, d, c, h, w = x.shape  # way*(shot+query), num_frames, channel, height, weight
         x = x.view(b * d, c, h, w)
@@ -172,7 +157,7 @@ class TRX(nn.Module):
             x = mm_x
         
         # encoder
-        x = self.resnet(x)
+        x = self.encoder(x)
         x = torch.cat(x, dim=1).squeeze() 
         x = x.view(b, d, -1)
 
@@ -188,43 +173,6 @@ class TRX(nn.Module):
         logits = torch.norm(sample_logits, dim=[-1]) * -1
     
         return logits
-
-    def build_backbone(self, bn_threshold):
-        if self.multi_modal:
-            num_parallel = 1+int(self.use_depth)+int(self.use_pose)+int(self.use_flow)
-
-            if self.backbone == "resnet18":
-                resnet = resnet18(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion) 
-                #resnet = resnet18(pretrained=True) 
-            elif self.backbone == "resnet34":
-                resnet = resnet34(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion)
-            elif self.backbone == "resnet50":
-                resnet = resnet50(pretrained=True, parallel=num_parallel, num_parallel=num_parallel, 
-                                  bn_threshold=bn_threshold, fusion=self.fusion)
-        else:
-            if self.backbone == "resnet18":
-                resnet = models.resnet18(pretrained=True)  
-            elif self.backbone == "resnet34":
-                resnet = models.resnet34(pretrained=True)
-            elif self.backbone == "resnet50":
-                resnet = models.resnet50(pretrained=True)
-        last_layer_idx = -1
-        self.resnet = resnet
-        self.last_dim = resnet.fc.in_features
-
-        if self.freeze_all:
-            self.resnet.apply(freeze_all)
-
-    def distribute_model(self, num_gpus):
-        """
-        Distribte the backbone over multiple GPUs
-        """
-        if num_gpus > 1:
-            self.resnet.cuda(0)
-            self.resnet = torch.nn.DataParallel(self.resnet, device_ids=[i for i in range(num_gpus)])
-
 
 
 if __name__ == "__main__":
@@ -246,7 +194,7 @@ if __name__ == "__main__":
     args = ArgsObject()
     torch.manual_seed(0)
     device = 'cuda:0'
-    model = CNN_TRX(args).to(device)
+    model = TRX(args).to(device)
     
     support_imgs = torch.rand(args.way * args.shot * args.sequence_length,3, args.img_size, args.img_size).to(device)
     query_imgs = torch.rand(args.way * args.query_per_class * args.sequence_length ,3, args.img_size, args.img_size).to(device)

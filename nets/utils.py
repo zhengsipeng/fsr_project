@@ -4,56 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
-def Proto(support, support_labels, query, way, shot):
-    """Protonet classifier"""
-    nc = support.shape[-1]
-    support = np.reshape(support, (-1, 1, way, shot, nc))
-    support = support.mean(axis=3)
-    batch_size = support.shape[0]
-    query = np.reshape(query, (batch_size, -1, 1, nc))  
-    logits = -((query - support)**2).sum(-1)
-    pred = np.argmax(logits, axis=-1)
-    pred = np.reshape(pred, (-1, ))
-    return pred
-
-
-def NN(support, support_labels, query):
-    """nearest classifier"""
-    support = np.expand_dims(support.transpose(), 0)
-    query = np.expand_dims(query, 2)
-
-    diff = np.multiply(query - support, query - support)
-    distance = diff.sum(1)
-    min_idx = np.argmin(distance, axis=1)
-    pred = [support_labels[idx] for idx in min_idx]
-    return pred
-
-
-def Cosine(support, support_labels, query):
-    """Cosine classifier"""
-    support_norm = np.linalg.norm(support, axis=1, keepdims=True)
-    support = support / support_norm
-    query_norm = np.linalg.norm(query, axis=1, keepdims=True)
-    query = query / query_norm
-
-    cosine_distance = query @ support.transpose()
-    max_idx = np.argmax(cosine_distance, axis=1)
-    pred = [support_labels[idx] for idx in max_idx]
-    return pred
-
-
 def freeze_all(model):
     for param in model.parameters():
         param.requires_grad = False
-
-
-def freeze_layer(model, layer):
-    n = 0
-    for module in model.children():
-        n += 1
-        if n == num:
-            freeze_all(module)
 
 
 def freeze_bn(model):

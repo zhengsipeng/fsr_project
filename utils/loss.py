@@ -94,15 +94,15 @@ class PatchCycleLoss(nn.Module):
 # =============================
 # Basic TRX Cross Entropy Loss
 # =============================
-def cross_entropy_trx(logits, labels, device):
+def CE_TRX(logits, labels):
     """
     Compute the classification loss for TRX.
     logits: [1, way * num_query, way]
     labels: [way * num_query]
     """
     size = logits.size()
-    num_samples = torch.tensor([1], dtype=torch.float, device=device, requires_grad=False)
-    log_py = torch.empty(size=(1, size[0]), dtype=torch.float, device=device)
+    num_samples = torch.tensor([1], dtype=torch.float, requires_grad=False).cuda()
+    log_py = torch.empty(size=(1, size[0]), dtype=torch.float).cuda()
     log_py[0] = -F.cross_entropy(logits, labels, reduction='none')
     score = torch.logsumexp(log_py, dim=0) - torch.log(num_samples)
     return -torch.sum(score, dim=0) / 16
@@ -216,9 +216,9 @@ class SupConLoss(nn.Module):
             loss = self.sigma_contrast + self.sigma_ce*ce_loss
             return loss, ce_loss, contrast_loss
         elif self.use_contrast and not self.use_ce:
-            return contrast_loss, 0, contrast_loss
+            return contrast_loss, contrast_loss, contrast_loss
         elif not self.use_contrast and self.use_ce:   
-            return ce_loss, 0, ce_loss
+            return ce_loss, ce_loss, ce_loss
             
         
         
